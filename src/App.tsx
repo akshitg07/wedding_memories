@@ -302,23 +302,6 @@ export default function App() {
             </button>
           </form>
 
-          {/* Quick instructions (Helpful Diagnostics overlay) */}
-          <div className="mt-8 pt-6 border-t border-white/5 text-center">
-            <span className="text-[10px] text-rose-400/80 font-mono tracking-widest block mb-2.5 uppercase">
-              Coordinator Portal Shortcuts
-            </span>
-            <div className="grid grid-cols-2 gap-2 text-[10px] font-mono text-slate-400">
-              <div className="p-2 bg-white/2 rounded-xl border border-white/5">
-                <span className="text-rose-400 block font-bold">Admin Deck</span>
-                <span>admin / admin123</span>
-              </div>
-              <div className="p-2 bg-white/2 rounded-xl border border-white/5">
-                <span className="text-amber-400 block font-bold">Standard Guest</span>
-                <span>guest / guest123</span>
-              </div>
-            </div>
-          </div>
-
         </div>
       </div>
     );
@@ -352,6 +335,7 @@ export default function App() {
         <AdminPanel
           token={token}
           currentUser={user}
+          albums={albums}
           onRefreshAlbums={loadDatabase}
           siteSettings={siteSettings}
           onSettingsUpdate={(updated) => setSiteSettings(updated)}
@@ -424,6 +408,8 @@ export default function App() {
           onClose={() => setActiveMemory(null)}
           onLikeToggle={handleLikeToggle}
           onDeleteMemory={handleDeleteMemory}
+          albums={albums}
+          onMemoryUpdate={loadDatabase}
         />
       )}
 

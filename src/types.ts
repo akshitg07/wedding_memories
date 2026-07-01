@@ -14,6 +14,7 @@ export interface User {
   role: UserRole;
   isActive: boolean;
   joinDate: string;
+  allowedAlbumIds?: string[]; // Allowed albums for guest access control (empty/undefined = all)
 }
 
 export interface MemoryMetadata {

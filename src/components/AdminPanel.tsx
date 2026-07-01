@@ -27,6 +27,7 @@ import { User, Album, SiteSettings, ActivityLog } from '../types';
 interface AdminPanelProps {
   token: string;
   currentUser: User;
+  albums: Album[];
   onRefreshAlbums: () => void;
   onSettingsUpdate: (settings: SiteSettings) => void;
   siteSettings: SiteSettings;
@@ -65,7 +66,7 @@ interface ModerationMemory {
   filename: string;
 }
 
-export default function AdminPanel({ token, currentUser, onRefreshAlbums, onSettingsUpdate, siteSettings }: AdminPanelProps) {
+export default function AdminPanel({ token, currentUser, albums, onRefreshAlbums, onSettingsUpdate, siteSettings }: AdminPanelProps) {
   const [activeTab, setActiveTab] = useState<'stats' | 'users' | 'moderation' | 'settings' | 'logs' | 'samba'>('stats');
   
   // Dashboard states
@@ -99,6 +100,11 @@ export default function AdminPanel({ token, currentUser, onRefreshAlbums, onSett
   const [newAlbumName, setNewAlbumName] = useState('');
   const [newAlbumDesc, setNewAlbumDesc] = useState('');
   const [albumSuccess, setAlbumSuccess] = useState('');
+  const [selectedParentId, setSelectedParentId] = useState('');
+
+  // Access Control state
+  const [accessControlUserId, setAccessControlUserId] = useState<string | null>(null);
+  const [accessControlAllowedIds, setAccessControlAllowedIds] = useState<string[]>([]);
 
   // Samba settings state
   const [sambaEnabled, setSambaEnabled] = useState(false);
@@ -505,6 +511,7 @@ export default function AdminPanel({ token, currentUser, onRefreshAlbums, onSett
         body: JSON.stringify({
           name: newAlbumName,
           description: newAlbumDesc,
+          parentId: selectedParentId || null,
         }),
       });
 
@@ -512,10 +519,57 @@ export default function AdminPanel({ token, currentUser, onRefreshAlbums, onSett
         setAlbumSuccess(`Album "${newAlbumName}" successfully created!`);
         setNewAlbumName('');
         setNewAlbumDesc('');
+        setSelectedParentId('');
         onRefreshAlbums();
       } else {
         const err = await res.json();
         alert(err.error || 'Failed to create album.');
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Delete Album
+  const handleDeleteAlbum = async (albumId: string) => {
+    if (window.confirm('Are you sure you want to permanently delete this album? Memories inside it will not be deleted, but will be moved to the root gallery.')) {
+      try {
+        const res = await fetch(`/api/albums/${albumId}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          onRefreshAlbums();
+        } else {
+          const err = await res.json();
+          alert(err.error || 'Failed to delete album.');
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  };
+
+  // Save guest visibility rules
+  const handleSaveAccessControl = async () => {
+    if (!accessControlUserId) return;
+    try {
+      const res = await fetch(`/api/admin/users/${accessControlUserId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          allowedAlbumIds: accessControlAllowedIds,
+        }),
+      });
+      if (res.ok) {
+        setAccessControlUserId(null);
+        fetchUsers(); // Refresh the list of guest accounts
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to save visibility rules.');
       }
     } catch (err) {
       console.error(err);
@@ -958,6 +1012,7 @@ export default function AdminPanel({ token, currentUser, onRefreshAlbums, onSett
                   <tr>
                     <th className="py-3">Uploader / Guest Details</th>
                     <th className="py-3">System Role</th>
+                    <th className="py-3">Folder Access</th>
                     <th className="py-3">Active Status</th>
                     <th className="py-3 text-right">Actions</th>
                   </tr>
@@ -1022,6 +1077,36 @@ export default function AdminPanel({ token, currentUser, onRefreshAlbums, onSett
                         }`}>
                           {u.role}
                         </span>
+                      </td>
+
+                      <td className="py-4">
+                        {u.role === 'admin' ? (
+                          <span className="text-xs text-purple-400 font-semibold flex items-center gap-1">
+                            <ShieldCheck className="w-3.5 h-3.5" />
+                            Full Access
+                          </span>
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs text-slate-300">
+                              {u.allowedAlbumIds && u.allowedAlbumIds.length > 0 ? (
+                                <span className="font-semibold text-rose-400">
+                                  {u.allowedAlbumIds.length} folder(s)
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 italic">All folders</span>
+                              )}
+                            </span>
+                            <button
+                              onClick={() => {
+                                setAccessControlUserId(u.id);
+                                setAccessControlAllowedIds(u.allowedAlbumIds || []);
+                              }}
+                              className="px-2 py-0.5 text-[9px] uppercase tracking-wider font-bold bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 rounded transition cursor-pointer"
+                            >
+                              Edit
+                            </button>
+                          </div>
+                        )}
                       </td>
 
                       <td className="py-4">
@@ -1281,13 +1366,29 @@ export default function AdminPanel({ token, currentUser, onRefreshAlbums, onSett
 
               <div>
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5 ml-1 font-mono">
+                  Parent Folder (Optional, for Nested/Sub-album hierarchy)
+                </label>
+                <select
+                  value={selectedParentId}
+                  onChange={(e) => setSelectedParentId(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-black/40 border border-white/10 rounded-full text-sm focus:outline-none focus:border-rose-500/50 text-white cursor-pointer"
+                >
+                  <option value="">No Parent (Root Album/Folder)</option>
+                  {albums.map((a) => (
+                    <option key={a.id} value={a.id}>{a.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5 ml-1 font-mono">
                   Brief description for guests
                 </label>
                 <textarea
                   placeholder="e.g. Stunning sunsets and backdrops..."
                   value={newAlbumDesc}
                   onChange={(e) => setNewAlbumDesc(e.target.value)}
-                  rows={3}
+                  rows={2}
                   className="w-full px-4 py-3 bg-black/40 border border-white/10 rounded-2xl text-sm focus:outline-none focus:border-rose-500/50 text-white placeholder-slate-600"
                   id="textarea-album-desc"
                 />
@@ -1301,6 +1402,44 @@ export default function AdminPanel({ token, currentUser, onRefreshAlbums, onSett
                 Create Event Album
               </button>
             </form>
+
+            <div className="border-t border-white/5 pt-6 mt-6">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-mono block mb-4">
+                Existing Event Folders ({albums.length})
+              </span>
+              {albums.length === 0 ? (
+                <p className="text-xs text-slate-500 italic">No ceremony folders created yet.</p>
+              ) : (
+                <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+                  {albums.map((album) => {
+                    const parentAlbum = album.parentId ? albums.find(a => a.id === album.parentId) : null;
+                    return (
+                      <div key={album.id} className="flex items-center justify-between p-3 bg-white/5 border border-white/10 rounded-2xl">
+                        <div className="truncate max-w-[75%]">
+                          <h5 className="font-semibold text-xs text-white truncate">{album.name}</h5>
+                          {album.description && (
+                            <p className="text-[10px] text-slate-400 truncate mt-0.5">{album.description}</p>
+                          )}
+                          {parentAlbum && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 font-mono inline-block mt-1">
+                              Sub-folder of: {parentAlbum.name}
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteAlbum(album.id)}
+                          className="p-1.5 bg-rose-500/5 hover:bg-rose-500/10 border border-rose-500/10 hover:border-rose-500/25 rounded-full text-rose-400 transition cursor-pointer"
+                          title="Delete Album"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -1649,6 +1788,79 @@ export default function AdminPanel({ token, currentUser, onRefreshAlbums, onSett
             </div>
           </div>
 
+        </div>
+      )}
+
+      {/* Guest Folder Access Control Modal */}
+      {accessControlUserId && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-zinc-950 border border-white/10 rounded-3xl p-6 w-full max-w-md shadow-2xl animate-fade-in text-left">
+            <div className="flex justify-between items-center border-b border-white/5 pb-3 mb-4">
+              <h4 className="font-serif italic text-base text-white">Guest Folder Access Control</h4>
+              <button
+                onClick={() => setAccessControlUserId(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-full hover:bg-white/5 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-slate-400 mb-4 leading-relaxed">
+              Select which specific ceremony albums are visible to this guest account. If no folders are checked, this user has access to all folders by default.
+            </p>
+            
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-1 mb-6">
+              {albums.length === 0 ? (
+                <p className="text-xs text-slate-500 italic py-4 text-center">No albums or folders created yet.</p>
+              ) : (
+                albums.map((album) => {
+                  const isChecked = accessControlAllowedIds.includes(album.id);
+                  const parentAlbum = album.parentId ? albums.find(a => a.id === album.parentId) : null;
+                  return (
+                    <label
+                      key={album.id}
+                      className="flex items-center gap-3 p-3 rounded-2xl bg-white/5 border border-white/5 hover:border-white/10 transition cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => {
+                          if (isChecked) {
+                            setAccessControlAllowedIds(prev => prev.filter(id => id !== album.id));
+                          } else {
+                            setAccessControlAllowedIds(prev => [...prev, album.id]);
+                          }
+                        }}
+                        className="w-4 h-4 rounded border-white/10 text-rose-500 focus:ring-0 cursor-pointer"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-xs font-semibold text-slate-200 block truncate">{album.name}</span>
+                        {parentAlbum && (
+                          <span className="text-[9px] text-amber-400 font-mono">Sub-folder of {parentAlbum.name}</span>
+                        )}
+                      </div>
+                    </label>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setAccessControlUserId(null)}
+                className="flex-1 py-2 rounded-full border border-white/10 hover:bg-white/5 text-xs text-slate-300 font-semibold transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveAccessControl}
+                className="flex-1 py-2 rounded-full bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 text-xs text-white font-semibold transition shadow-lg shadow-rose-500/10"
+              >
+                Save Visibility Rules
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

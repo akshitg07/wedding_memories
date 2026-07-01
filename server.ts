@@ -48,6 +48,28 @@ const upload = multer({
 const app = express();
 app.use(express.json());
 
+// Helper function to resolve allowed album IDs recursively
+function getAllowedAlbumIds(user: User, albums: Album[]): string[] | null {
+  if (user.role === 'admin' || !user.allowedAlbumIds || user.allowedAlbumIds.length === 0) {
+    return null; // admin or unrestricted users can see all
+  }
+  
+  const allowed = new Set<string>();
+  
+  // Helper to add album and all its descendants recursively
+  const addFolderAndDescendants = (albumId: string) => {
+    if (allowed.has(albumId)) return;
+    allowed.add(albumId);
+    
+    // Find children of this folder
+    const children = albums.filter(a => a.parentId === albumId);
+    children.forEach(child => addFolderAndDescendants(child.id));
+  };
+  
+  user.allowedAlbumIds.forEach(id => addFolderAndDescendants(id));
+  return Array.from(allowed);
+}
+
 // Set up statics for uploaded files
 app.use('/uploads', express.static(UPLOADS_DIR));
 
@@ -260,11 +282,20 @@ app.get('/api/samba/logs', authenticateToken, requireAdmin, (req: AuthenticatedR
 
 // --- Albums Endpoints ---
 app.get('/api/albums', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
-  res.json(DB.getAlbums());
+  const albums = DB.getAlbums();
+  const user = DB.getUserById(req.user!.id);
+  if (user && user.role !== 'admin') {
+    const allowedIds = getAllowedAlbumIds(user, albums);
+    if (allowedIds !== null) {
+      res.json(albums.filter((a) => allowedIds.includes(a.id)));
+      return;
+    }
+  }
+  res.json(albums);
 });
 
 app.post('/api/albums', authenticateToken, requireAdmin, (req: AuthenticatedRequest, res: Response) => {
-  const { name, description, coverUrl } = req.body;
+  const { name, description, coverUrl, parentId } = req.body;
   if (!name) {
     res.status(400).json({ error: 'Album name is required.' });
     return;
@@ -274,6 +305,7 @@ app.post('/api/albums', authenticateToken, requireAdmin, (req: AuthenticatedRequ
     name,
     description: description || '',
     coverUrl: coverUrl || null,
+    parentId: parentId || null,
     createdAt: new Date().toISOString(),
   });
 
@@ -328,6 +360,16 @@ app.get('/api/memories', authenticateToken, (req: AuthenticatedRequest, res: Res
   let filtered = memories;
   if (req.user?.role !== 'admin' && settings.requireModeration) {
     filtered = memories.filter((m) => m.isApproved || m.uploaderId === req.user?.id);
+  }
+
+  // Filter by allowedAlbumIds for guest users
+  const user = DB.getUserById(req.user!.id);
+  if (user && user.role !== 'admin') {
+    const albums = DB.getAlbums();
+    const allowedIds = getAllowedAlbumIds(user, albums);
+    if (allowedIds !== null) {
+      filtered = filtered.filter((m) => m.albumId === null || (m.albumId && allowedIds.includes(m.albumId)));
+    }
   }
 
   // Filter by albumId
@@ -438,6 +480,36 @@ app.post(
     res.json(newMemory);
   }
 );
+
+// Update memory (e.g. change album, etc.)
+app.put('/api/memories/:id', authenticateToken, requireAdmin, (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const memory = DB.getMemoryById(req.params.id);
+    if (!memory) {
+      res.status(404).json({ error: 'Memory not found.' });
+      return;
+    }
+    const { albumId, isApproved } = req.body;
+    const updates: Partial<Memory> = {};
+    if (albumId !== undefined) {
+      updates.albumId = albumId === '' ? null : albumId;
+    }
+    if (isApproved !== undefined) {
+      updates.isApproved = !!isApproved;
+    }
+    const updated = DB.updateMemory(req.params.id, updates);
+    DB.logActivity(
+      req.user!.id,
+      req.user!.username,
+      'MEMORY_UPDATE',
+      `Reassigned album for: ${memory.originalName}`,
+      getIp(req)
+    );
+    res.json(updated);
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
 
 // Delete memory
 app.delete('/api/memories/:id', authenticateToken, (req: AuthenticatedRequest, res: Response) => {
@@ -758,7 +830,7 @@ app.post('/api/admin/users', authenticateToken, requireAdmin, (req: Authenticate
 
 // Update/Reset User Status or Password
 app.put('/api/admin/users/:id', authenticateToken, requireAdmin, (req: AuthenticatedRequest, res: Response) => {
-  const { isActive, password, role, displayName } = req.body;
+  const { isActive, password, role, displayName, allowedAlbumIds } = req.body;
   const targetUser = DB.getUserById(req.params.id);
 
   if (!targetUser) {
@@ -776,6 +848,7 @@ app.put('/api/admin/users/:id', authenticateToken, requireAdmin, (req: Authentic
   if (isActive !== undefined) updates.isActive = !!isActive;
   if (role !== undefined) updates.role = role === 'admin' ? 'admin' : 'user';
   if (displayName !== undefined) updates.displayName = displayName;
+  if (allowedAlbumIds !== undefined) updates.allowedAlbumIds = allowedAlbumIds;
   if (password && password.trim() !== '') {
     updates.passwordHash = bcryptjs.hashSync(password, 10);
   }

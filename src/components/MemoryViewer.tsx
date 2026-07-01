@@ -22,7 +22,7 @@ import {
   Volume2,
   VolumeX,
 } from 'lucide-react';
-import { Memory, Comment, User as UserType } from '../types';
+import { Memory, Comment, User as UserType, Album } from '../types';
 
 interface MemoryViewerProps {
   memory: Memory;
@@ -32,6 +32,8 @@ interface MemoryViewerProps {
   onClose: () => void;
   onLikeToggle: (id: string) => void;
   onDeleteMemory?: (id: string) => void;
+  albums?: Album[];
+  onMemoryUpdate?: () => void;
 }
 
 export default function MemoryViewer({
@@ -42,6 +44,8 @@ export default function MemoryViewer({
   onClose,
   onLikeToggle,
   onDeleteMemory,
+  albums = [],
+  onMemoryUpdate,
 }: MemoryViewerProps) {
   const [currentMemory, setCurrentMemory] = useState<Memory>(memory);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -392,6 +396,48 @@ export default function MemoryViewer({
                 </div>
               </div>
             </div>
+
+            {user.role === 'admin' && albums && albums.length > 0 && (
+              <div className="p-3 bg-rose-500/5 border border-rose-500/10 rounded-2xl">
+                <label className="text-[9px] uppercase font-bold tracking-widest text-rose-400 font-mono block mb-1">
+                  Folder / Album Assignment
+                </label>
+                <select
+                  value={currentMemory.albumId || ''}
+                  onChange={async (e) => {
+                    const newId = e.target.value;
+                    try {
+                      const res = await fetch(`/api/memories/${currentMemory.id}`, {
+                        method: 'PUT',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          Authorization: `Bearer ${token}`,
+                        },
+                        body: JSON.stringify({ albumId: newId }),
+                      });
+                      if (res.ok) {
+                        const updated = await res.json();
+                        setCurrentMemory(updated);
+                        if (onMemoryUpdate) onMemoryUpdate();
+                      } else {
+                        const err = await res.json();
+                        alert(err.error || 'Failed to reassign folder.');
+                      }
+                    } catch (err) {
+                      console.error(err);
+                    }
+                  }}
+                  className="w-full px-2.5 py-1.5 bg-black/50 border border-white/10 rounded-xl text-xs focus:outline-none focus:border-rose-500/50 text-white cursor-pointer"
+                >
+                  <option value="">No Folder (Root Pool)</option>
+                  {albums.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {a.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3 pt-2">
               <div className="p-3 bg-white/5 border border-white/10 rounded-2xl">
