@@ -1,0 +1,6 @@
+{
+  "name": "Wedding Memories Gallery",
+  "description": "A beautiful, premium wedding photo and video gallery with timeline browsing, guest uploads, interactive comments, likes, and admin moderation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
