@@ -6,7 +6,7 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Install build dependencies
-RUN apk add --no-repeat --no-cache python3 make g++
+RUN apk add --no-cache python3 make g++
 
 # Copy manifests
 COPY package.json package-lock.json* ./
