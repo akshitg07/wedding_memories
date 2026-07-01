@@ -50,6 +50,7 @@ export interface Album {
   description: string;
   coverUrl: string | null;
   createdAt: string;
+  parentId?: string | null; // For nested folders
 }
 
 export interface Comment {
@@ -82,11 +83,28 @@ export interface ActivityLog {
   timestamp: string;
 }
 
+export interface SambaSettings {
+  enabled: boolean;
+  type: 'mount' | 'direct';
+  mountPath: string;      // E.g. /mnt/samba/wedding
+  smbHost: string;        // E.g. 192.168.1.100
+  smbShare: string;       // E.g. photos
+  smbUser: string;
+  smbPass: string;
+  smbDomain?: string;
+  remoteFolder: string;   // E.g. wedding_photos (inside the share)
+  autoSync: boolean;
+  lastSyncTime?: string;
+  syncStatus?: 'idle' | 'syncing' | 'error' | 'success';
+  syncMessage?: string;
+}
+
 export interface SiteSettings {
   siteName: string;
   requireModeration: boolean;
   allowDownloads: boolean;
   primaryColor: string;
+  samba?: SambaSettings;
 }
 
 export interface DbSchema {

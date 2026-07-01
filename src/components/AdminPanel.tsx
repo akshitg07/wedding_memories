@@ -66,7 +66,7 @@ interface ModerationMemory {
 }
 
 export default function AdminPanel({ token, currentUser, onRefreshAlbums, onSettingsUpdate, siteSettings }: AdminPanelProps) {
-  const [activeTab, setActiveTab] = useState<'stats' | 'users' | 'moderation' | 'settings' | 'logs'>('stats');
+  const [activeTab, setActiveTab] = useState<'stats' | 'users' | 'moderation' | 'settings' | 'logs' | 'samba'>('stats');
   
   // Dashboard states
   const [stats, setStats] = useState<StatsData | null>(null);
@@ -99,6 +99,25 @@ export default function AdminPanel({ token, currentUser, onRefreshAlbums, onSett
   const [newAlbumName, setNewAlbumName] = useState('');
   const [newAlbumDesc, setNewAlbumDesc] = useState('');
   const [albumSuccess, setAlbumSuccess] = useState('');
+
+  // Samba settings state
+  const [sambaEnabled, setSambaEnabled] = useState(false);
+  const [sambaType, setSambaType] = useState<'mount' | 'direct'>('mount');
+  const [mountPath, setMountPath] = useState('');
+  const [smbHost, setSmbHost] = useState('');
+  const [smbShare, setSmbShare] = useState('');
+  const [smbUser, setSmbUser] = useState('');
+  const [smbPass, setSmbPass] = useState('');
+  const [smbDomain, setSmbDomain] = useState('WORKGROUP');
+  const [remoteFolder, setRemoteFolder] = useState('');
+  const [sambaAutoSync, setSambaAutoSync] = useState(false);
+  const [sambaSyncStatus, setSambaSyncStatus] = useState('idle');
+  const [sambaSyncMessage, setSambaSyncMessage] = useState('');
+  const [sambaLastSyncTime, setSambaLastSyncTime] = useState('');
+  const [sambaLogs, setSambaLogs] = useState('');
+  const [sambaConfigSuccess, setSambaConfigSuccess] = useState('');
+  const [sambaConfigError, setSambaConfigError] = useState('');
+  const [isSambaSyncing, setIsSambaSyncing] = useState(false);
 
   // Fetch Stats
   const fetchStats = async () => {
@@ -161,12 +180,144 @@ export default function AdminPanel({ token, currentUser, onRefreshAlbums, onSett
     }
   };
 
+  // Fetch Samba Config
+  const fetchSambaConfig = async () => {
+    try {
+      const res = await fetch('/api/samba/config', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSambaEnabled(data.enabled || false);
+        setSambaType(data.type || 'mount');
+        setMountPath(data.mountPath || '');
+        setSmbHost(data.smbHost || '');
+        setSmbShare(data.smbShare || '');
+        setSmbUser(data.smbUser || '');
+        setSmbPass(data.smbPass || '');
+        setSmbDomain(data.smbDomain || 'WORKGROUP');
+        setRemoteFolder(data.remoteFolder || '');
+        setSambaSyncStatus(data.syncStatus || 'idle');
+        setSambaSyncMessage(data.syncMessage || '');
+        setSambaLastSyncTime(data.lastSyncTime || '');
+        setIsSambaSyncing(data.syncStatus === 'syncing');
+      }
+    } catch (err) {
+      console.error('Error fetching Samba config:', err);
+    }
+  };
+
+  // Fetch Samba logs
+  const fetchSambaLogs = async () => {
+    try {
+      const res = await fetch('/api/samba/logs', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSambaLogs(data.logs || '');
+      }
+    } catch (err) {
+      console.error('Error fetching Samba logs:', err);
+    }
+  };
+
+  // Save Samba Config
+  const handleSaveSambaConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSambaConfigSuccess('');
+    setSambaConfigError('');
+    try {
+      const res = await fetch('/api/samba/config', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          enabled: sambaEnabled,
+          type: sambaType,
+          mountPath,
+          smbHost,
+          smbShare,
+          smbUser,
+          smbPass,
+          smbDomain,
+          remoteFolder,
+          autoSync: sambaAutoSync,
+        }),
+      });
+      if (res.ok) {
+        setSambaConfigSuccess('Samba integration configuration saved successfully!');
+        fetchSambaConfig();
+      } else {
+        const errData = await res.json();
+        setSambaConfigError(errData.error || 'Failed to save configuration.');
+      }
+    } catch (err: any) {
+      setSambaConfigError(err.message || 'Error occurred saving configuration.');
+    }
+  };
+
+  // Trigger Sync
+  const handleTriggerSambaSync = async () => {
+    setIsSambaSyncing(true);
+    setSambaSyncStatus('syncing');
+    setSambaSyncMessage('Synchronization run triggered...');
+    try {
+      const res = await fetch('/api/samba/sync', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        setIsSambaSyncing(false);
+        setSambaSyncStatus('error');
+        setSambaSyncMessage('Failed to trigger background synchronization.');
+      }
+    } catch (err) {
+      setIsSambaSyncing(false);
+      setSambaSyncStatus('error');
+      setSambaSyncMessage('Error triggering sync.');
+    }
+  };
+
   useEffect(() => {
     if (activeTab === 'stats') fetchStats();
     if (activeTab === 'users') fetchUsers();
     if (activeTab === 'moderation') fetchPending();
     if (activeTab === 'logs') fetchLogs();
   }, [activeTab]);
+
+  useEffect(() => {
+    let interval: any;
+    if (activeTab === 'samba') {
+      fetchSambaConfig();
+      fetchSambaLogs();
+      
+      // If actively syncing, poll every 2 seconds
+      interval = setInterval(() => {
+        fetchSambaLogs();
+        fetch('/api/samba/config', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+          .then((r) => r.json())
+          .then((data) => {
+            setSambaSyncStatus(data.syncStatus || 'idle');
+            setSambaSyncMessage(data.syncMessage || '');
+            setSambaLastSyncTime(data.lastSyncTime || '');
+            if (data.syncStatus === 'syncing') {
+              setIsSambaSyncing(true);
+            } else {
+              setIsSambaSyncing(false);
+            }
+          })
+          .catch((e) => console.error(e));
+      }, 2000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [activeTab, token]);
 
   // Handle create user
   const handleCreateUser = async (e: React.FormEvent) => {
@@ -456,6 +607,19 @@ export default function AdminPanel({ token, currentUser, onRefreshAlbums, onSett
         >
           <Terminal className="w-3.5 h-3.5" />
           Audit Logs
+        </button>
+
+        <button
+          onClick={() => setActiveTab('samba')}
+          className={`flex items-center gap-2 px-5 py-2.5 text-xs font-semibold rounded-full transition shrink-0 cursor-pointer ${
+            activeTab === 'samba'
+              ? 'bg-white/15 border border-white/15 text-white shadow-sm'
+              : 'border border-transparent text-slate-400 hover:text-white'
+          }`}
+          id="tab-samba"
+        >
+          <HardDrive className="w-3.5 h-3.5" />
+          Samba / SMB Sync
         </button>
       </div>
 
@@ -1208,6 +1372,283 @@ export default function AdminPanel({ token, currentUser, onRefreshAlbums, onSett
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* ----------------------------------------------------------------- */}
+      {/* TAB content: Samba/SMB Integration */}
+      {/* ----------------------------------------------------------------- */}
+      {activeTab === 'samba' && (
+        <div className="space-y-6 animate-fade-in text-left">
+          
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            {/* Configuration Column */}
+            <div className="lg:col-span-2 space-y-6">
+              
+              <form onSubmit={handleSaveSambaConfig} className="p-6 bg-white/5 rounded-2xl border border-white/10 space-y-6">
+                <div className="flex items-center justify-between border-b border-white/5 pb-4">
+                  <div className="flex items-center gap-2">
+                    <Settings className="w-5 h-5 text-rose-400" />
+                    <h4 className="text-base font-medium text-white font-serif italic">
+                      Samba / SMB Sync Setup
+                    </h4>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 font-mono">Enable Samba Link</span>
+                    <input
+                      type="checkbox"
+                      checked={sambaEnabled}
+                      onChange={(e) => setSambaEnabled(e.target.checked)}
+                      className="w-4 h-4 rounded border-white/10 text-rose-500 focus:ring-0 cursor-pointer animate-none"
+                    />
+                  </div>
+                </div>
+
+                {sambaConfigSuccess && (
+                  <div className="p-3 text-xs text-emerald-400 bg-emerald-500/10 rounded-xl border border-emerald-500/20 flex items-center gap-2 font-mono">
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <span>{sambaConfigSuccess}</span>
+                  </div>
+                )}
+                {sambaConfigError && (
+                  <div className="p-3 text-xs text-rose-400 bg-rose-500/10 rounded-xl border border-rose-500/20 flex items-center gap-2 font-mono">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{sambaConfigError}</span>
+                  </div>
+                )}
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5 ml-1 font-mono">
+                      Samba Integration Mode
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setSambaType('mount')}
+                        className={`py-2 px-4 rounded-full text-xs font-semibold border transition cursor-pointer text-center ${
+                          sambaType === 'mount'
+                            ? 'bg-rose-500 border-transparent text-white'
+                            : 'border-white/10 text-slate-400 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        Local Mounted Path (Samba / HDD)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSambaType('direct')}
+                        className={`py-2 px-4 rounded-full text-xs font-semibold border transition cursor-pointer text-center ${
+                          sambaType === 'direct'
+                            ? 'bg-rose-500 border-transparent text-white'
+                            : 'border-white/10 text-slate-400 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        Direct Network Samba Connection (SMB)
+                      </button>
+                    </div>
+                  </div>
+
+                  {sambaType === 'mount' ? (
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5 ml-1 font-mono">
+                        Local Mounted Server Path
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. /mnt/samba/wedding_photos"
+                        value={mountPath}
+                        onChange={(e) => setMountPath(e.target.value)}
+                        className="w-full px-4 py-2.5 bg-black/40 border border-white/10 rounded-full text-sm focus:outline-none focus:border-rose-500/50 text-white placeholder-slate-600 font-mono text-xs"
+                      />
+                      <p className="text-[10px] text-slate-500 mt-1.5 ml-1 leading-relaxed">
+                        Specify the absolute directory path on the server where the Samba share or drive is mounted. The app will recursively read files from this directory.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="md:col-span-2">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5 ml-1 font-mono">
+                          Samba Server Host / IP Address
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. 192.168.1.150"
+                          value={smbHost}
+                          onChange={(e) => setSmbHost(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-black/40 border border-white/10 rounded-full text-sm focus:outline-none focus:border-rose-500/50 text-white placeholder-slate-600 font-mono text-xs"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5 ml-1 font-mono">
+                          Share Name
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. wedding_files"
+                          value={smbShare}
+                          onChange={(e) => setSmbShare(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-black/40 border border-white/10 rounded-full text-sm focus:outline-none focus:border-rose-500/50 text-white placeholder-slate-600 font-mono text-xs"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5 ml-1 font-mono">
+                          Subfolder inside share (Optional)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. raw_media (leave blank for root)"
+                          value={remoteFolder}
+                          onChange={(e) => setRemoteFolder(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-black/40 border border-white/10 rounded-full text-sm focus:outline-none focus:border-rose-500/50 text-white placeholder-slate-600 font-mono text-xs"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5 ml-1 font-mono">
+                          Samba Username
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. guest or administrator"
+                          value={smbUser}
+                          onChange={(e) => setSmbUser(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-black/40 border border-white/10 rounded-full text-sm focus:outline-none focus:border-rose-500/50 text-white placeholder-slate-600 font-mono text-xs"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5 ml-1 font-mono">
+                          Samba Password
+                        </label>
+                        <input
+                          type="password"
+                          placeholder="••••••••"
+                          value={smbPass}
+                          onChange={(e) => setSmbPass(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-black/40 border border-white/10 rounded-full text-sm focus:outline-none focus:border-rose-500/50 text-white placeholder-slate-600 font-mono text-xs"
+                        />
+                      </div>
+
+                      <div className="md:col-span-2">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5 ml-1 font-mono">
+                          Active Directory / SMB Domain (Optional)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="WORKGROUP (Default)"
+                          value={smbDomain}
+                          onChange={(e) => setSmbDomain(e.target.value)}
+                          className="w-full px-4 py-2.5 bg-black/40 border border-white/10 rounded-full text-sm focus:outline-none focus:border-rose-500/50 text-white placeholder-slate-600 font-mono text-xs"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-2.5 bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 text-white font-semibold rounded-full text-xs uppercase tracking-wider shadow-lg shadow-rose-500/10 cursor-pointer transition flex items-center justify-center gap-1.5"
+                >
+                  <Sliders className="w-3.5 h-3.5" />
+                  Save Integration Settings
+                </button>
+              </form>
+            </div>
+
+            {/* Sync Controls Column */}
+            <div className="space-y-6">
+              
+              <div className="p-6 bg-white/5 rounded-2xl border border-white/10 space-y-6">
+                <h4 className="text-base font-medium text-white font-serif italic border-b border-white/5 pb-3 flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-rose-400" />
+                  Samba Synchronization Status
+                </h4>
+
+                <div className="space-y-4">
+                  
+                  {/* Status Indicator Pill */}
+                  <div className="flex items-center justify-between p-3 bg-black/30 rounded-xl border border-white/5">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 font-mono">Current Status</span>
+                    <span className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
+                      sambaSyncStatus === 'syncing'
+                        ? 'bg-blue-500/10 border-blue-500/20 text-blue-400 animate-pulse'
+                        : sambaSyncStatus === 'success'
+                        ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
+                        : sambaSyncStatus === 'error'
+                        ? 'bg-rose-500/10 border-rose-500/20 text-rose-400'
+                        : 'bg-slate-500/10 border-white/10 text-slate-400'
+                    }`}>
+                      ● {sambaSyncStatus}
+                    </span>
+                  </div>
+
+                  {sambaSyncMessage && (
+                    <div className="p-3.5 bg-black/20 rounded-xl border border-white/5 font-mono text-[11px] text-slate-300 leading-normal">
+                      <span className="text-[9px] uppercase font-bold text-slate-400 block mb-1 font-mono">Status Details</span>
+                      {sambaSyncMessage}
+                    </div>
+                  )}
+
+                  <div className="p-3 bg-black/30 rounded-xl border border-white/5 flex flex-col gap-1.5 font-mono text-xs text-left">
+                    <div className="flex justify-between">
+                      <span className="text-slate-400 text-[10px] uppercase">Last Synced:</span>
+                      <span className="text-white text-[11px]">
+                        {sambaLastSyncTime ? new Date(sambaLastSyncTime).toLocaleString() : 'Never'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={!sambaEnabled || isSambaSyncing}
+                    onClick={handleTriggerSambaSync}
+                    className={`w-full py-3 rounded-full text-xs font-bold uppercase tracking-widest transition flex items-center justify-center gap-2 ${
+                      !sambaEnabled
+                        ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-white/5'
+                        : isSambaSyncing
+                        ? 'bg-blue-600/30 text-blue-400 border border-blue-500/20 cursor-not-allowed animate-pulse'
+                        : 'bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-white cursor-pointer shadow-lg shadow-emerald-500/10'
+                    }`}
+                  >
+                    <HardDrive className={`w-4 h-4`} />
+                    {isSambaSyncing ? 'Synchronizing Share...' : 'Sync Samba Media Now'}
+                  </button>
+                  
+                  {!sambaEnabled && (
+                    <p className="text-[10px] text-rose-400 text-center font-mono leading-relaxed mt-1">
+                      ⚠️ Please enable the Samba Link toggle in settings first to trigger media scans.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Logs Terminal view */}
+          <div className="p-6 bg-white/5 rounded-2xl border border-white/10 space-y-4">
+            <div className="flex justify-between items-center border-b border-white/5 pb-3">
+              <div className="flex items-center gap-2">
+                <Terminal className="w-4 h-4 text-rose-400" />
+                <h4 className="text-base font-medium text-white font-serif italic">
+                  Real-Time Import &amp; Sync Diagnostics Log
+                </h4>
+              </div>
+              <button
+                onClick={fetchSambaLogs}
+                className="px-3 py-1 text-[9px] uppercase tracking-wider bg-white/10 border border-white/5 hover:bg-white/15 text-white font-bold rounded-full transition cursor-pointer"
+              >
+                Fetch New Logs
+              </button>
+            </div>
+
+            <div className="w-full bg-black/60 border border-white/10 rounded-2xl p-4 font-mono text-xs text-slate-300 h-64 overflow-y-auto whitespace-pre-wrap leading-relaxed shadow-inner">
+              {sambaLogs ? sambaLogs : 'Ready. Click "Sync Samba Media Now" to display real-time scanning logs.'}
+            </div>
+          </div>
+
         </div>
       )}
 

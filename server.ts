@@ -11,6 +11,7 @@ import jwt from 'jsonwebtoken';
 import bcryptjs from 'bcryptjs';
 import multer from 'multer';
 import { DB } from './server/db';
+import { runSambaSync, getSyncLogs } from './server/sambaService';
 import { User, Memory, Album, Comment, Notification, SiteSettings } from './src/types';
 
 // Constants
@@ -212,6 +213,49 @@ app.put('/api/settings', authenticateToken, requireAdmin, (req: AuthenticatedReq
   const updated = DB.updateSettings(req.body);
   DB.logActivity(req.user?.id || null, req.user?.username || null, 'SETTINGS_UPDATE', 'Updated site configuration.', getIp(req));
   res.json(updated);
+});
+
+// --- Samba Endpoints ---
+app.get('/api/samba/config', authenticateToken, requireAdmin, (req: AuthenticatedRequest, res: Response) => {
+  const settings = DB.getSettings();
+  res.json(settings.samba || {
+    enabled: false,
+    type: 'mount',
+    mountPath: '',
+    smbHost: '',
+    smbShare: '',
+    smbUser: '',
+    smbPass: '',
+    remoteFolder: '',
+    autoSync: false,
+  });
+});
+
+app.put('/api/samba/config', authenticateToken, requireAdmin, (req: AuthenticatedRequest, res: Response) => {
+  const settings = DB.getSettings();
+  const currentSamba: any = settings.samba || {};
+  const updatedSamba = {
+    ...currentSamba,
+    ...req.body,
+    syncStatus: req.body.syncStatus !== undefined ? req.body.syncStatus : (currentSamba.syncStatus || 'idle'),
+    syncMessage: req.body.syncMessage !== undefined ? req.body.syncMessage : (currentSamba.syncMessage || ''),
+    lastSyncTime: currentSamba.lastSyncTime,
+  };
+
+  const updatedSettings = DB.updateSettings({ samba: updatedSamba });
+  DB.logActivity(req.user?.id || null, req.user?.username || null, 'SAMBA_CONFIG_UPDATE', 'Updated Samba integration settings.', getIp(req));
+  res.json(updatedSettings.samba);
+});
+
+app.post('/api/samba/sync', authenticateToken, requireAdmin, (req: AuthenticatedRequest, res: Response) => {
+  runSambaSync().catch((err) => {
+    console.error('Unhandled Samba sync error in background:', err);
+  });
+  res.json({ message: 'Samba / SMB Sync run initiated in the background.' });
+});
+
+app.get('/api/samba/logs', authenticateToken, requireAdmin, (req: AuthenticatedRequest, res: Response) => {
+  res.json({ logs: getSyncLogs() });
 });
 
 // --- Albums Endpoints ---
