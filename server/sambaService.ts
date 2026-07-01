@@ -68,6 +68,26 @@ export async function runSambaSync(): Promise<void> {
     let albumsCreatedCount = 0;
     let filesSkippedCount = 0;
 
+    // Cache existing synced memories to perform O(1) duplicate checks and skip redundant network calls
+    const initialMemories = DB.getMemories();
+    const syncedSet = new Set(
+      initialMemories.map((m) => `${m.albumId || 'root'}::${m.originalName}`)
+    );
+
+    // Dynamic helper for pure async concurrency pooling
+    const runConcurrent = async <T>(items: T[], fn: (item: T) => Promise<void>, limit: number) => {
+      const executing = new Set<Promise<any>>();
+      for (const item of items) {
+        const p = Promise.resolve().then(() => fn(item));
+        executing.add(p);
+        p.then(() => executing.delete(p));
+        if (executing.size >= limit) {
+          await Promise.race(executing);
+        }
+      }
+      await Promise.all(executing);
+    };
+
     // Helper to create an album if it doesn't exist
     const createAlbumIfNeeded = async (albumName: string, parentId: string | null): Promise<string> => {
       const albums = DB.getAlbums();
@@ -236,35 +256,51 @@ export async function runSambaSync(): Promise<void> {
             }
 
             try {
-              for (const file of files) {
-                if (file.startsWith('.')) continue;
+              const validFiles = files.filter(f => !f.startsWith('.'));
 
+              await runConcurrent(validFiles, async (file) => {
                 const remoteFilePath = remoteDir ? `${remoteDir}\\${file}` : file;
+                const ext = path.extname(file).toLowerCase();
+                const isMedia = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp4', '.mov', '.mkv', '.avi'].includes(ext);
 
-                // Test if directory by readdir
-                const isDir = await new Promise<boolean>((res) => {
-                  smbClient.readdir(remoteFilePath, (dirErr: any) => {
-                    res(!dirErr);
-                  });
-                });
+                if (isMedia) {
+                  // O(1) check using our cached set
+                  const key = `${parentAlbumId || 'root'}::${file}`;
+                  if (syncedSet.has(key)) {
+                    filesSkippedCount++;
+                    return;
+                  }
 
-                if (isDir) {
-                  const nestedAlbumId = await createAlbumIfNeeded(file, parentAlbumId);
-                  await scanSmb(remoteFilePath, nestedAlbumId);
-                } else {
-                  const ext = path.extname(file).toLowerCase();
-                  const isMedia = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp4', '.mov', '.mkv', '.avi'].includes(ext);
-                  if (isMedia) {
-                    // Fetch file size
-                    const bytes = await new Promise<number>((res) => {
-                      smbClient.getSize(remoteFilePath, (sizeErr: any, sizeVal: number) => {
-                        res(sizeErr ? 0 : sizeVal);
-                      });
+                  // Only call getSize if it is not a known duplicate!
+                  const bytes = await new Promise<number>((res) => {
+                    smbClient.getSize(remoteFilePath, (sizeErr: any, sizeVal: number) => {
+                      res(sizeErr ? 0 : sizeVal);
                     });
-                    await onFileFound(remoteFilePath, file, parentAlbumId, bytes, true, smbClient);
+                  });
+
+                  await onFileFound(remoteFilePath, file, parentAlbumId, bytes, true, smbClient);
+                  syncedSet.add(key); // Register in local set
+                } else {
+                  // Skip checking standard non-media file extensions to avoid unnecessary network round-trips
+                  const isCommonNonMedia = ['.txt', '.pdf', '.docx', '.xlsx', '.zip', '.rar', '.db', '.ini', '.DS_Store'].includes(ext);
+                  if (isCommonNonMedia) {
+                    return;
+                  }
+
+                  // Check if it is a directory by trying readdir
+                  const isDir = await new Promise<boolean>((res) => {
+                    smbClient.readdir(remoteFilePath, (dirErr: any) => {
+                      res(!dirErr);
+                    });
+                  });
+
+                  if (isDir) {
+                    const nestedAlbumId = await createAlbumIfNeeded(file, parentAlbumId);
+                    await scanSmb(remoteFilePath, nestedAlbumId);
                   }
                 }
-              }
+              }, 5); // Process up to 5 files concurrently to speed up network roundtrips safely
+
               resolve();
             } catch (innerErr) {
               reject(innerErr);

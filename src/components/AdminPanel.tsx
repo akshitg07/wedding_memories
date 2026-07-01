@@ -756,7 +756,7 @@ export default function AdminPanel({ token, currentUser, albums, onRefreshAlbums
                   {/* Area Under Curve Gradient */}
                   <defs>
                     <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#f43f5e" stopOpacity="0.2" stopColor-opacity="0.3" />
+                      <stop offset="0%" stopColor="#f43f5e" stopOpacity="0.3" />
                       <stop offset="100%" stopColor="#f43f5e" stopOpacity="0.0" />
                     </linearGradient>
                   </defs>
