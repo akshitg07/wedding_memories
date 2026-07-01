@@ -376,7 +376,7 @@ export default function UploadModal({ isOpen, onClose, albums, token, onUploadSu
                 Drag &amp; Drop photos and videos here
               </h4>
               <p className="text-xs text-gray-400 dark:text-gray-500 mt-2 max-w-sm">
-                Supports multiple files and high-resolution media (up to 100MB per file). You can also drag entire camera folders directly.
+                Supports multiple files and high-resolution media with no size limits. You can also drag entire camera folders directly.
               </p>
             </div>
           ) : (
