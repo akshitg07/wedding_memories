@@ -160,9 +160,9 @@ export async function runSambaSync(): Promise<void> {
       }
 
       // Detect Media Type
-      const isVideo = ['.mp4', '.mov', '.mkv', '.avi'].includes(ext);
+      const isVideo = ['.mp4', '.mov', '.mkv', '.avi', '.mpg', '.mpeg', '.m4v'].includes(ext);
       const type = isVideo ? 'video' : 'image';
-      const mimeType = isVideo ? 'video/mp4' : `image/${ext.replace('.', '') || 'jpeg'}`;
+      const mimeType = isVideo ? (['.mpg', '.mpeg'].includes(ext) ? 'video/mpeg' : 'video/mp4') : `image/${ext.replace('.', '') || 'jpeg'}`;
 
       // Insert memory record
       const newMemory: Memory = {
@@ -215,7 +215,7 @@ export async function runSambaSync(): Promise<void> {
             await scanLocal(relativeItemPath, nestedAlbumId);
           } else if (stat.isFile()) {
             const ext = path.extname(item).toLowerCase();
-            const isMedia = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp4', '.mov', '.mkv', '.avi'].includes(ext);
+            const isMedia = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp4', '.mov', '.mkv', '.avi', '.mpg', '.mpeg', '.m4v'].includes(ext);
             if (isMedia) {
               await onFileFound(absoluteItemPath, item, parentAlbumId, stat.size, false);
             }
@@ -261,7 +261,7 @@ export async function runSambaSync(): Promise<void> {
               await runConcurrent(validFiles, async (file) => {
                 const remoteFilePath = remoteDir ? `${remoteDir}\\${file}` : file;
                 const ext = path.extname(file).toLowerCase();
-                const isMedia = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp4', '.mov', '.mkv', '.avi'].includes(ext);
+                const isMedia = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp4', '.mov', '.mkv', '.avi', '.mpg', '.mpeg', '.m4v'].includes(ext);
 
                 if (isMedia) {
                   // O(1) check using our cached set

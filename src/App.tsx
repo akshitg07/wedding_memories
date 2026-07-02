@@ -117,6 +117,15 @@ export default function App() {
     }
   }, [user, token]);
 
+  // Synchronize browser tab name with wedding site name settings
+  useEffect(() => {
+    if (siteSettings?.siteName) {
+      document.title = siteSettings.siteName;
+    } else {
+      document.title = 'Akshit & Disha Wedding';
+    }
+  }, [siteSettings?.siteName]);
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');

@@ -45,7 +45,8 @@ export default function UploadModal({ isOpen, onClose, albums, token, onUploadSu
   // Extract dimensions and video details on the client side
   const getMediaMetadata = (file: File): Promise<{ width?: number; height?: number; duration?: number; cameraModel?: string }> => {
     return new Promise((resolve) => {
-      const isVideo = file.type.startsWith('video/');
+      const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+      const isVideo = file.type.startsWith('video/') || ['.mp4', '.mov', '.mkv', '.avi', '.mpg', '.mpeg', '.m4v'].includes(ext);
       const url = URL.createObjectURL(file);
 
       if (isVideo) {
@@ -97,8 +98,9 @@ export default function UploadModal({ isOpen, onClose, albums, token, onUploadSu
     const newTasks: UploadTask[] = [];
     for (let i = 0; i < fileList.length; i++) {
       const file = fileList[i];
-      const isImage = file.type.startsWith('image/');
-      const isVideo = file.type.startsWith('video/');
+      const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+      const isVideo = file.type.startsWith('video/') || ['.mp4', '.mov', '.mkv', '.avi', '.mpg', '.mpeg', '.m4v'].includes(ext);
+      const isImage = file.type.startsWith('image/') || ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff', '.heic', '.heif'].includes(ext);
 
       if (isImage || isVideo) {
         newTasks.push({
@@ -341,7 +343,7 @@ export default function UploadModal({ isOpen, onClose, albums, token, onUploadSu
             ref={fileInputRef}
             onChange={handleFileChange}
             multiple
-            accept="image/*,video/*"
+            accept="image/*,video/*,.mpg,.mpeg,.m4v"
             className="hidden"
           />
           <input

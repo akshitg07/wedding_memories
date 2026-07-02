@@ -417,7 +417,8 @@ app.post(
     const user = DB.getUserById(req.user!.id);
     const settings = DB.getSettings();
 
-    const isVideo = req.file.mimetype.startsWith('video/');
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    const isVideo = req.file.mimetype.startsWith('video/') || ['.mp4', '.mov', '.mkv', '.avi', '.mpg', '.mpeg', '.m4v'].includes(ext);
     const type = isVideo ? 'video' : 'image';
 
     const metadata = {
