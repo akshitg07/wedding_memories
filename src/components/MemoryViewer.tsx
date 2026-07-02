@@ -209,13 +209,13 @@ export default function MemoryViewer({
   const mediaUrl = `/uploads/${currentMemory.filename}`;
 
   return (
-    <div className="fixed inset-0 z-50 flex bg-black/95 backdrop-blur-md overflow-hidden animate-fade-in">
+    <div className="fixed inset-0 z-50 flex flex-col md:flex-row bg-black/95 backdrop-blur-md overflow-y-auto md:overflow-hidden animate-fade-in">
       
       {/* 1. MAIN DISPLAY AREA (LEFT) */}
-      <div className="flex-1 relative flex flex-col justify-center items-center p-4">
+      <div className="flex-1 relative flex flex-col justify-center items-center p-4 pt-20 md:pt-4 min-h-[75vh] md:min-h-0">
         
         {/* Top Controls */}
-        <div className="absolute top-4 left-4 right-4 z-10 flex items-center justify-between">
+        <div className="absolute top-4 left-4 right-4 z-10 flex flex-wrap gap-2 items-center justify-between">
           
           {/* Quick slideshow controls */}
           <div className="flex items-center gap-2 bg-black/40 backdrop-blur border border-white/10 rounded-full px-4 py-1.5 text-white">
@@ -227,12 +227,14 @@ export default function MemoryViewer({
               {isPlayingSlideshow ? (
                 <>
                   <Pause className="w-4 h-4 text-rose-400 animate-pulse" />
-                  Slideshow Active
+                  <span className="hidden sm:inline">Slideshow Active</span>
+                  <span className="inline sm:hidden">Active</span>
                 </>
               ) : (
                 <>
                   <Play className="w-4 h-4 text-rose-400" />
-                  Slideshow Mode
+                  <span className="hidden sm:inline">Slideshow Mode</span>
+                  <span className="inline sm:hidden">Slideshow</span>
                 </>
               )}
             </button>
@@ -299,7 +301,7 @@ export default function MemoryViewer({
         {allMemories.length > 1 && (
           <button
             onClick={handlePrev}
-            className="absolute left-4 p-3 bg-black/30 hover:bg-white/10 text-white/70 hover:text-white rounded-full transition-all border border-white/5 hover:scale-105 z-10"
+            className="absolute left-4 top-1/2 -translate-y-1/2 p-3 bg-black/30 hover:bg-white/10 text-white/70 hover:text-white rounded-full transition-all border border-white/5 hover:scale-105 z-10"
             id="btn-viewer-prev"
           >
             <ChevronLeft className="w-6 h-6" />
@@ -307,7 +309,7 @@ export default function MemoryViewer({
         )}
 
         {/* Media Container */}
-        <div className="w-full h-full max-h-[80vh] flex items-center justify-center">
+        <div className="w-full h-full max-h-[60vh] md:max-h-[80vh] flex items-center justify-center">
           {currentMemory.type === 'video' ? (
             <div className="relative max-w-full max-h-full group">
               <video
@@ -317,7 +319,7 @@ export default function MemoryViewer({
                 autoPlay
                 muted={isVideoMuted}
                 loop
-                className="max-w-full max-h-[80vh] rounded-xl object-contain shadow-2xl"
+                className="max-w-full max-h-[60vh] md:max-h-[80vh] rounded-xl object-contain shadow-2xl"
               />
               <button
                 onClick={toggleMute}
@@ -331,7 +333,7 @@ export default function MemoryViewer({
             <img
               src={mediaUrl}
               alt={currentMemory.originalName}
-              className="max-w-full max-h-[80vh] rounded-xl object-contain shadow-2xl select-none transition-transform duration-300 hover:scale-102"
+              className="max-w-full max-h-[60vh] md:max-h-[80vh] rounded-xl object-contain shadow-2xl select-none transition-transform duration-300 hover:scale-102"
               draggable="false"
             />
           )}
@@ -341,7 +343,7 @@ export default function MemoryViewer({
         {allMemories.length > 1 && (
           <button
             onClick={handleNext}
-            className="absolute right-4 p-3 bg-black/30 hover:bg-white/10 text-white/70 hover:text-white rounded-full transition-all border border-white/5 hover:scale-105 z-10"
+            className="absolute right-4 top-1/2 -translate-y-1/2 p-3 bg-black/30 hover:bg-white/10 text-white/70 hover:text-white rounded-full transition-all border border-white/5 hover:scale-105 z-10"
             id="btn-viewer-next"
           >
             <ChevronRight className="w-6 h-6" />
@@ -372,7 +374,7 @@ export default function MemoryViewer({
 
       {/* 2. COMMENTS & METADATA BAR (RIGHT) */}
       {showMetadata && (
-        <div className="w-96 border-l border-white/10 bg-zinc-950/95 backdrop-blur-md flex flex-col h-full text-white shrink-0 animate-slide-in">
+        <div className="w-full md:w-96 border-t md:border-t-0 md:border-l border-white/10 bg-zinc-950/95 backdrop-blur-md flex flex-col shrink-0 text-white animate-slide-in md:h-full">
           
           {/* Section: Upload Details */}
           <div className="p-5 border-b border-white/5 flex flex-col gap-4">
@@ -496,7 +498,7 @@ export default function MemoryViewer({
           </div>
 
           {/* Section: Comments Feed */}
-          <div className="flex-1 overflow-y-auto p-5 flex flex-col min-h-0">
+          <div className="flex-1 md:overflow-y-auto p-5 flex flex-col min-h-0">
             <span className="text-[9px] uppercase font-bold tracking-widest text-rose-400 font-mono">Guest Comments ({comments.length})</span>
             
             {comments.length === 0 ? (
@@ -505,7 +507,7 @@ export default function MemoryViewer({
                 <p className="text-xs">No comments yet. Be the first to congratulate them!</p>
               </div>
             ) : (
-              <div className="space-y-4 mt-3 flex-1 overflow-y-auto pr-1">
+              <div className="space-y-4 mt-3 flex-1 md:overflow-y-auto pr-1">
                 {comments.map((comment) => (
                   <div key={comment.id} className="flex gap-2.5 items-start">
                     <div className="w-7 h-7 rounded-full bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-[10px] font-bold uppercase shrink-0 text-rose-300">
