@@ -130,7 +130,7 @@ export default function TimelineGallery({
       const memory = memories.find((m) => m.id === id);
       if (memory) {
         const link = document.createElement('a');
-        link.href = `/api/memories/${id}/download`;
+        link.href = `/api/memories/${id}/download?token=${encodeURIComponent(token)}`;
         link.download = memory.originalName;
         document.body.appendChild(link);
         link.click();

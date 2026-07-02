@@ -82,7 +82,12 @@ interface AuthenticatedRequest extends Request {
 // Authentication Middleware
 function authenticateToken(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+  let token = authHeader && authHeader.split(' ')[1];
+
+  // Also support token as a query parameter for downloads/links
+  if (!token && req.query.token) {
+    token = req.query.token as string;
+  }
 
   if (!token) {
     res.status(401).json({ error: 'Access token required. Please log in.' });

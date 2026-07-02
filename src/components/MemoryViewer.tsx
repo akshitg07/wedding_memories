@@ -21,6 +21,7 @@ import {
   Maximize2,
   Volume2,
   VolumeX,
+  Film,
 } from 'lucide-react';
 import { Memory, Comment, User as UserType, Album } from '../types';
 
@@ -54,6 +55,7 @@ export default function MemoryViewer({
   const [isPlayingSlideshow, setIsPlayingSlideshow] = useState(false);
   const [slideshowInterval, setSlideshowInterval] = useState(4000); // 4s default
   const [isVideoMuted, setIsVideoMuted] = useState(true);
+  const [videoError, setVideoError] = useState(false);
 
   const slideshowTimerRef = useRef<NodeJS.Timeout | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -77,6 +79,7 @@ export default function MemoryViewer({
 
   useEffect(() => {
     loadComments(currentMemory.id);
+    setVideoError(false);
   }, [currentMemory.id]);
 
   // Keyboard navigation
@@ -268,7 +271,7 @@ export default function MemoryViewer({
             </button>
 
             <a
-              href={`/api/memories/${currentMemory.id}/download`}
+              href={`/api/memories/${currentMemory.id}/download?token=${encodeURIComponent(token)}`}
               className="p-2.5 rounded-full bg-black/30 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 transition"
               title="Download Original"
               id="btn-download-original"
@@ -311,24 +314,46 @@ export default function MemoryViewer({
         {/* Media Container */}
         <div className="w-full h-full max-h-[60vh] md:max-h-[80vh] flex items-center justify-center">
           {currentMemory.type === 'video' ? (
-            <div className="relative max-w-full max-h-full group">
-              <video
-                ref={videoRef}
-                src={mediaUrl}
-                controls
-                autoPlay
-                muted={isVideoMuted}
-                loop
-                className="max-w-full max-h-[60vh] md:max-h-[80vh] rounded-xl object-contain shadow-2xl"
-              />
-              <button
-                onClick={toggleMute}
-                className="absolute bottom-16 right-4 p-2 bg-black/60 hover:bg-black/80 text-white rounded-lg transition border border-white/10 z-10"
-                id="btn-video-mute-toggle"
-              >
-                {isVideoMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-              </button>
-            </div>
+            videoError || currentMemory.filename.toLowerCase().endsWith('.mpg') || currentMemory.filename.toLowerCase().endsWith('.mpeg') ? (
+              <div className="flex flex-col items-center justify-center p-8 bg-zinc-900/80 border border-white/10 rounded-2xl text-center max-w-md mx-auto shadow-2xl backdrop-blur-md">
+                <div className="w-16 h-16 bg-rose-500/10 border border-rose-500/30 rounded-full flex items-center justify-center mb-4 text-rose-400">
+                  <Film className="w-8 h-8 animate-pulse" />
+                </div>
+                <h3 className="text-lg font-semibold text-white mb-2">
+                  MPEG Video Playback
+                </h3>
+                <p className="text-sm text-gray-400 mb-6">
+                  This video is stored in high-quality <strong>{currentMemory.originalName.split('.').pop()?.toUpperCase() || 'MPEG'}</strong> format. Standard web browsers cannot play MPEG files directly, but you can download and enjoy it in full quality!
+                </p>
+                <a
+                  href={`/api/memories/${currentMemory.id}/download?token=${encodeURIComponent(token)}`}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 bg-rose-500 hover:bg-rose-600 active:bg-rose-700 text-white font-medium rounded-xl transition shadow-lg shadow-rose-500/20"
+                >
+                  <Download className="w-4 h-4" />
+                  Download Video File
+                </a>
+              </div>
+            ) : (
+              <div className="relative max-w-full max-h-full group">
+                <video
+                  ref={videoRef}
+                  src={mediaUrl}
+                  controls
+                  autoPlay
+                  muted={isVideoMuted}
+                  loop
+                  onError={() => setVideoError(true)}
+                  className="max-w-full max-h-[60vh] md:max-h-[80vh] rounded-xl object-contain shadow-2xl"
+                />
+                <button
+                  onClick={toggleMute}
+                  className="absolute bottom-16 right-4 p-2 bg-black/60 hover:bg-black/80 text-white rounded-lg transition border border-white/10 z-10"
+                  id="btn-video-mute-toggle"
+                >
+                  {isVideoMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                </button>
+              </div>
+            )
           ) : (
             <img
               src={mediaUrl}
